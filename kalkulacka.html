@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Kalkulačka</title>
+<style>
+  :root {
+    --bg: #1c1b1a;
+    --panel: #232221;
+    --display-bg: #171616;
+    --text: #f3f1ec;
+    --muted: #9a9691;
+    --key-bg: #2f2d2b;
+    --key-bg-hover: #3a3735;
+    --op-bg: #c9622f;
+    --op-bg-hover: #d97136;
+    --func-bg: #43413e;
+    --func-text: #f3f1ec;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --bg: #eae7e0;
+      --panel: #f7f5f1;
+      --display-bg: #ffffff;
+      --text: #1c1b1a;
+      --muted: #6b6863;
+      --key-bg: #ffffff;
+      --key-bg-hover: #ece9e3;
+      --op-bg: #c9622f;
+      --op-bg-hover: #d97136;
+      --func-bg: #ddd8cf;
+      --func-text: #1c1b1a;
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #eae7e0;
+    --panel: #f7f5f1;
+    --display-bg: #ffffff;
+    --text: #1c1b1a;
+    --muted: #6b6863;
+    --key-bg: #ffffff;
+    --key-bg-hover: #ece9e3;
+    --op-bg: #c9622f;
+    --op-bg-hover: #d97136;
+    --func-bg: #ddd8cf;
+    --func-text: #1c1b1a;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    height: 100%;
+    margin: 0;
+  }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+  .calc {
+    width: 100%;
+    max-width: 340px;
+    background: var(--panel);
+    border-radius: 20px;
+    padding: 18px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.25);
+  }
+  .display {
+    background: var(--display-bg);
+    border-radius: 14px;
+    padding: 22px 18px 18px;
+    margin-bottom: 16px;
+    text-align: right;
+    overflow: hidden;
+  }
+  .display .prev {
+    min-height: 20px;
+    font-size: 14px;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow-x: auto;
+  }
+  .display .current {
+    font-size: 40px;
+    font-weight: 600;
+    line-height: 1.2;
+    word-break: break-all;
+    min-height: 48px;
+  }
+  .keys {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+  }
+  button {
+    border: none;
+    border-radius: 12px;
+    padding: 18px 0;
+    font-size: 19px;
+    font-weight: 500;
+    background: var(--key-bg);
+    color: var(--text);
+    cursor: pointer;
+    transition: background 0.12s ease, transform 0.06s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  button:active {
+    transform: scale(0.96);
+  }
+  button:hover {
+    background: var(--key-bg-hover);
+  }
+  button.op {
+    background: var(--op-bg);
+    color: #fff;
+  }
+  button.op:hover {
+    background: var(--op-bg-hover);
+  }
+  button.func {
+    background: var(--func-bg);
+    color: var(--func-text);
+  }
+  button.zero {
+    grid-column: span 2;
+  }
+</style>
+</head>
+<body>
+  <div class="calc">
+    <div class="display">
+      <div class="prev" id="prevLine">&nbsp;</div>
+      <div class="current" id="currentLine">0</div>
+    </div>
+    <div class="keys">
+      <button class="func" data-action="clear">AC</button>
+      <button class="func" data-action="sign">±</button>
+      <button class="func" data-action="percent">%</button>
+      <button class="op" data-action="divide">÷</button>
+
+      <button data-digit="7">7</button>
+      <button data-digit="8">8</button>
+      <button data-digit="9">9</button>
+      <button class="op" data-action="multiply">×</button>
+
+      <button data-digit="4">4</button>
+      <button data-digit="5">5</button>
+      <button data-digit="6">6</button>
+      <button class="op" data-action="subtract">−</button>
+
+      <button data-digit="1">1</button>
+      <button data-digit="2">2</button>
+      <button data-digit="3">3</button>
+      <button class="op" data-action="add">+</button>
+
+      <button class="zero" data-digit="0">0</button>
+      <button data-action="decimal">,</button>
+      <button class="op" data-action="equals">=</button>
+    </div>
+  </div>
+
+<script>
+(function () {
+  const prevLine = document.getElementById('prevLine');
+  const currentLine = document.getElementById('currentLine');
+
+  let current = '0';
+  let previousValue = null;
+  let pendingOp = null;
+  let justEvaluated = false;
+
+  function formatNumber(numStr) {
+    if (numStr === 'Chyba') return numStr;
+    const [intPart, decPart] = numStr.split('.');
+    const sign = intPart.startsWith('-') ? '-' : '';
+    const digits = sign ? intPart.slice(1) : intPart;
+    const withSep = digits.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    let result = sign + withSep;
+    if (decPart !== undefined) result += ',' + decPart;
+    return result;
+  }
+
+  function render() {
+    currentLine.textContent = formatNumber(current);
+    if (previousValue !== null && pendingOp) {
+      const opSymbol = { add: '+', subtract: '−', multiply: '×', divide: '÷' }[pendingOp];
+      prevLine.textContent = formatNumber(previousValue) + ' ' + opSymbol;
+    } else {
+      prevLine.textContent = '\u00A0';
+    }
+  }
+
+  function inputDigit(d) {
+    if (justEvaluated) {
+      current = d === '0' ? '0' : d;
+      justEvaluated = false;
+      return;
+    }
+    if (current === '0') {
+      current = d;
+    } else if (current.replace('-', '').replace('.', '').length < 15) {
+      current += d;
+    }
+  }
+
+  function inputDecimal() {
+    if (justEvaluated) {
+      current = '0.';
+      justEvaluated = false;
+      return;
+    }
+    if (!current.includes('.')) current += '.';
+  }
+
+  function toggleSign() {
+    if (current === '0') return;
+    current = current.startsWith('-') ? current.slice(1) : '-' + current;
+  }
+
+  function applyPercent() {
+    current = String(parseFloat(current) / 100);
+  }
+
+  function clearAll() {
+    current = '0';
+    previousValue = null;
+    pendingOp = null;
+    justEvaluated = false;
+  }
+
+  function compute(a, b, op) {
+    switch (op) {
+      case 'add': return a + b;
+      case 'subtract': return a - b;
+      case 'multiply': return a * b;
+      case 'divide': return b === 0 ? null : a / b;
+      default: return b;
+    }
+  }
+
+  function setOperator(op) {
+    if (pendingOp && previousValue !== null && !justEvaluated) {
+      const result = compute(previousValue, parseFloat(current), pendingOp);
+      if (result === null) {
+        current = 'Chyba';
+        previousValue = null;
+        pendingOp = null;
+        render();
+        return;
+      }
+      previousValue = result;
+      current = trimResult(result);
+    } else {
+      previousValue = parseFloat(current);
+    }
+    pendingOp = op;
+    justEvaluated = true;
+  }
+
+  function trimResult(num) {
+    if (!isFinite(num)) return 'Chyba';
+    let s = num.toString();
+    if (s.length > 15) {
+      s = parseFloat(num.toPrecision(10)).toString();
+    }
+    return s;
+  }
+
+  function equals() {
+    if (pendingOp === null || previousValue === null) return;
+    const result = compute(previousValue, parseFloat(current), pendingOp);
+    current = result === null ? 'Chyba' : trimResult(result);
+    previousValue = null;
+    pendingOp = null;
+    justEvaluated = true;
+  }
+
+  document.querySelector('.keys').addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (!btn) return;
+    const digit = btn.getAttribute('data-digit');
+    const action = btn.getAttribute('data-action');
+
+    if (digit !== null) {
+      inputDigit(digit);
+    } else if (action === 'decimal') {
+      inputDecimal();
+    } else if (action === 'sign') {
+      toggleSign();
+    } else if (action === 'percent') {
+      applyPercent();
+    } else if (action === 'clear') {
+      clearAll();
+    } else if (['add', 'subtract', 'multiply', 'divide'].includes(action)) {
+      setOperator(action);
+    } else if (action === 'equals') {
+      equals();
+    }
+    render();
+  });
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key >= '0' && e.key <= '9') inputDigit(e.key);
+    else if (e.key === '.' || e.key === ',') inputDecimal();
+    else if (e.key === '+') setOperator('add');
+    else if (e.key === '-') setOperator('subtract');
+    else if (e.key === '*') setOperator('multiply');
+    else if (e.key === '/') { e.preventDefault(); setOperator('divide'); }
+    else if (e.key === 'Enter' || e.key === '=') equals();
+    else if (e.key === 'Escape') clearAll();
+    else if (e.key === 'Backspace') {
+      current = current.length > 1 && current !== '0' ? current.slice(0, -1) : '0';
+    } else {
+      return;
+    }
+    render();
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
